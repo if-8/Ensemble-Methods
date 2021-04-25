@@ -1,0 +1,157 @@
+import pandas as pd
+import numpy as np
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    classification_report,
+    recall_score,
+    precision_score,
+    accuracy_score)
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import VotingClassifier
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+
+
+pd.set_option('display.max_columns', 100)
+from google.colab import files
+uploaded = files.upload() 
+data = pd.read_csv('cancer.csv')
+display(data.head())
+
+
+data.drop(['Sample Code Number'],axis = 1, inplace = True)
+
+data['Bare Nuclei']
+
+data.replace('?',0, inplace=True)
+
+scaler = MinMaxScaler(feature_range=(0, 1))
+normalizedData = scaler.fit_transform(imputedData)
+cols = ['Clump Thickness', 'Uniformity of Cell Size', 'Uniformity of Cell Shape', 'Marginal Adhesion', 'Single Epithelial Cell Size', 'Bland Chromatin', 'Bare Nuclei', 'Normal Nucleoli', 'Mitosis','Class']
+normalizedData = pd.DataFrame(normalizedData, columns=cols)
+print(normalizedData.head())
+
+
+# 2
+X = normalizedData.iloc[:,:9]
+y = normalizedData.iloc[:,9]
+
+print(data.shape)
+print(X.shape)
+print(y.shape)
+
+# partitioning the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(
+                                                    X,
+                                                    y,
+                                                    test_size=0.3,
+                                                    stratify=y,
+                                                    random_state=42
+                                                    )
+dummy_classifier = DummyClassifier(strategy='most_frequent')
+dummy_classifier.fit(X_train,y_train)
+baseline_acc = dummy_classifier.score(X_test,y_test)
+
+# Answer:
+print("Baseline Accuracy: ", baseline_acc, "or", "{:.4%}".format(baseline_acc))
+
+
+# 3
+# Generic Bagging model
+#def create_bootstrap_sample(data):
+#    return data.sample(n= data.shape[0], replace = True)
+
+#bootstrap_sample = create_bootstrap_sample(X_train)
+
+#print('Number of rows should be the same:')
+#print('Number of rows in X_train:  ', X_train.shape[0])
+#print('Number of rows in bootstrap:', create_bootstrap_sample(X_train).shape[0])
+
+#print(bootstrap_sample)
+
+model_bagging = BaggingClassifier(n_estimators=10, random_state = 42)
+model_bagging.fit(X_train, y_train)
+pred_bagging = model_bagging.predict(X_test)
+acc_bagging = accuracy_score(y_test, pred_bagging)
+
+print('\nAccuracy Score: ', acc_bagging, "or","{:.4%}".format(acc_bagging))
+
+
+# 4
+# Random Forest Model
+model_rf = RandomForestClassifier(n_estimators=100, max_features=7, random_state=42).fit(X_train, y_train)
+acc = round(accuracy_score(y_test, model_rf.predict(X_test)), 12)
+
+print('Accuracy Score: ', acc, "or","{:.4%}".format(acc))
+
+# Top 3 features for RandomForest
+feature_importances = model_rf.feature_importances_
+features = X_train.columns
+frame = pd.DataFrame({'features': features, 'importance': feature_importances}).nlargest(3, 'importance')
+print(frame)
+
+
+# 5
+# AdaBoost Classification
+base_est = DecisionTreeClassifier(max_depth =4)
+ada_boost = AdaBoostClassifier(base_est, n_estimators=200, random_state=42, learning_rate=.05)
+ada_boost.fit(X_train, y_train)
+ada_pred = ada_boost.predict(X_test)
+ada_acc = accuracy_score(y_test, ada_pred)
+print('Accuracy score: ', ada_acc, "or", "{:.4%}".format(ada_acc))
+
+# Top 3 features for AdaBoost
+top_features = ada_boost.feature_importances_
+feat = X_train.columns
+frame2 = pd.DataFrame({'features': feat, 'importance': top_features}).nlargest(3, 'importance')
+print(frame2)
+
+
+# 6
+# Voting Ensemble for Classification
+svmClf = SVC(probability=True, random_state=0) # probability calculation
+logClf = LogisticRegression(random_state=0)
+newRF = RandomForestClassifier(n_estimators=200,max_features=7, random_state=42)
+svmClf.fit(X_train, y_train)
+logClf.fit(X_train, y_train)
+newRF.fit(X_train, y_train)
+base_est.fit(X_train, y_train)
+
+svm_pred = svmClf.predict(X_test)
+svm_acc = accuracy_score(y_test, svm_pred)
+print("SVM Accuracy: ", svm_acc)
+
+log_pred = logClf.predict(X_test)
+log_acc = accuracy_score(y_test, log_pred)
+print("Log Accuracy: ", log_acc)
+
+dt_pred = base_est.predict(X_test)
+dt_acc = accuracy_score(y_test, dt_pred)
+print("DT Accuracy: ", dt_acc)
+
+rf_pred = newRF.predict(X_test)
+rf_acc = accuracy_score(y_test, rf_pred)
+print("RF Accuracy: ", rf_acc)
+
+clf = VotingClassifier(estimators = [('rf',model_rf), ('dt',base_est), ('svm',svmClf), ('log', logClf)], voting='soft')
+
+# train the ensemble classifier
+clf.fit(X_train, y_train)
+
+clf_pred = clf.predict(X_test)
+#recall_voting = recall_score(y_test, clf_pred)
+#precision_voting = precision_score(y_test, clf_pred)
+print('\nAccuracy score Voting Clf: ', accuracy_score(y_test, clf_pred), "or", "{:.4%}".format(accuracy_score(y_test, clf_pred)))
+
+
+# 7
+# Answer
+# The best model among the above 4 models is a 3-way tie between the 
+# Bagging, Random Forest, and Voting Classifier models with an accuracy score of 95.714%
+
